@@ -1,11 +1,12 @@
 from playwright.sync_api import sync_playwright
 import json
-import time
-import random
-import os
 from datetime import datetime, timedelta
 
-def fetch_flights_playwright(depart_code, arrive_code, ddate, return_dt):
+def fetch_flights_playwright(depart_code, arrive_code, ddate):
+    # 自動計算回程日期以解除日曆鎖定
+    depart_dt_obj = datetime.strptime(ddate, "%Y-%m-%d")
+    return_dt = (depart_dt_obj + timedelta(days=2)).strftime("%Y-%m-%d")
+    
     result_data = None
 
     with sync_playwright() as p:
@@ -144,108 +145,5 @@ def fetch_flights_playwright(depart_code, arrive_code, ddate, return_dt):
 
     return result_data
 
-# 🔹 解析資料邏輯 (保持不變)
-def parse_flights(data, ddate, scrap_day): # 多傳入日期參數
-    flights = []
-    if not data or "itineraryList" not in data:
-        return flights
 
-    # 備援：從全局獲取幣別 (Trip.com 常見結構)
-    global_currency = data.get("currency") or data.get("context", {}).get("currency", "TWD")
 
-    for item in data.get("itineraryList", []):
-        try:
-            journey = item.get("journeyList", [{}])[0]
-            sections = journey.get("transSectionList", [])
-            if not sections: continue
-            
-            first_seg = sections[0]
-            f_info = first_seg.get("flightInfo", {})
-            
-            # 安全取得價格
-            policies = item.get("policies", [])
-            price_info = policies[0].get("price", {}) if policies else {}
-
-            # 優化：航空公司名稱取值邏輯
-            # 優先順序：名稱 -> 代碼 -> 航班號前兩碼
-            airline = (f_info.get("airlineName") or 
-                       f_info.get("airlineCode") or 
-                       f_info.get("flightNo")[:2] if f_info.get("flightNo") else "Unknown")
-
-            flights.append({
-                "search_date": ddate,
-                "price": price_info.get("totalPrice"),
-                "currency": price_info.get("currency") or global_currency, # 沒幣別就用全局的
-                "airline": airline,
-                "flight_no": f_info.get("flightNo"),
-                "departure": first_seg.get("departDateTime"),
-                "arrival": sections[-1].get("arriveDateTime"),
-                "stops": len(sections) - 1
-            })
-        except Exception as e:
-            print(f"⚠️ 出錯的資料: {item}")
-            continue
-    return flights
-
-# 🔹 批次抓取邏輯
-def batch_search(depart, arrive, day_count):
-    scrap_day = datetime.now().strftime("%Y-%m-%d")
-    # Trip.com 預設通常從 +2 天開始比較穩
-    start_dt = datetime.now() + timedelta(days=2)
-    all_results = []
-
-    for i in range(day_count):
-        current_dt = start_dt + timedelta(days=i)
-        date_str = current_dt.strftime("%Y-%m-%d")
-        
-        print(f"\n📅 [{i+1}/{day_count}] 正在搜尋起飛日期: {date_str}")
-        
-        raw_data = fetch_flights_playwright(depart, arrive, date_str)
-        day_flights = parse_flights(raw_data, date_str, scrap_day)
-        
-        if day_flights:
-            print(f"💰 成功！抓到 {len(day_flights)} 筆航班")
-            all_results.extend(day_flights)
-        else:
-            print(f"❌ {date_str} 抓取失敗")
-            
-        # 隨機休息，模擬真人行為 (開發測試可設短一點，生產環境建議 10-20秒)
-        if i < day_count - 1:
-            sleep_time = random.uniform(5, 8)
-            print(f"😴 休息 {round(sleep_time, 1)} 秒後繼續...")
-            time.sleep(sleep_time)
-    
-    return all_results
-
-# 🔹 執行進入點
-if __name__ == "__main__":
-    # --- 配置區 ---
-    DEPART_CITY = "TPE"
-    ARRIVE_CITY = "TYO"
-    TEST_DAYS = 3  # 測試階段先抓 3 天份
-    # --------------
-
-    print(f"🚀 ETL 啟動 | 航線: {DEPART_CITY} -> {ARRIVE_CITY} | 預計抓取 {TEST_DAYS} 天份")
-    
-    final_data = batch_search(DEPART_CITY, ARRIVE_CITY, TEST_DAYS)
-
-    if final_data:
-        # 儲存結果
-        BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-        output_dir = os.path.join(BASE_DIR, "data")
-        os.makedirs(output_dir, exist_ok=True)
-
-        output_file = os.path.join(
-            output_dir,
-            f"flight_data_{DEPART_CITY}_{ARRIVE_CITY}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-        )
-
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(final_data, f, ensure_ascii=False, indent=4)
-        
-        print("\n" + "="*30)
-        print(f"✅ 所有任務完成！")
-        print(f"📊 總計抓取筆數: {len(final_data)}")
-        print(f"💾 檔案已儲存至: {output_file}")
-    else:
-        print("\n❌ 最終未獲得任何資料，請檢查網路或反爬蟲機制。")
