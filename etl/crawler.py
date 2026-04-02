@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 import json
 import time
 import random
+import os
 from datetime import datetime, timedelta
 
 def fetch_flights_playwright(depart_code, arrive_code, ddate, return_dt):
@@ -230,7 +231,15 @@ if __name__ == "__main__":
 
     if final_data:
         # 儲存結果
-        output_file = f"flight_data_{DEPART_CITY}_{ARRIVE_CITY}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+        BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+        output_dir = os.path.join(BASE_DIR, "data")
+        os.makedirs(output_dir, exist_ok=True)
+
+        output_file = os.path.join(
+            output_dir,
+            f"flight_data_{DEPART_CITY}_{ARRIVE_CITY}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+        )
+
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(final_data, f, ensure_ascii=False, indent=4)
         
