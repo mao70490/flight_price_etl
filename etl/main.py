@@ -1,13 +1,13 @@
 import os, json, time, random
 from datetime import datetime, timedelta
-from crawler import fetch_flights_playwright
+from crawler import fetch_flights_by_url_logic
 from transform import parse_flights
 
 # 🔹 批次抓取邏輯
 def batch_search(depart, arrive, day_count):
     scrap_day = datetime.now().strftime("%Y-%m-%d")
     # Trip.com 預設通常從 +2 天開始比較穩
-    start_dt = datetime.now() + timedelta(days=2)
+    start_dt = datetime.now() + timedelta(days=3)
     all_results = []
 
     for i in range(day_count):
@@ -16,7 +16,7 @@ def batch_search(depart, arrive, day_count):
         
         print(f"\n📅 [{i+1}/{day_count}] 正在搜尋起飛日期: {date_str}")
         
-        raw_data = fetch_flights_playwright(depart, arrive, date_str)
+        raw_data = fetch_flights_by_url_logic(depart, arrive, date_str)
         day_flights = parse_flights(raw_data, date_str, scrap_day)
         
         if day_flights:
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # --- 配置區 ---
     DEPART_CITY = "TPE"
     ARRIVE_CITY = "TYO"
-    TEST_DAYS = 3  # 測試階段先抓 3 天份
+    TEST_DAYS = 1  # 測試階段先抓 3 天份
     # --------------
 
     print(f"🚀 ETL 啟動 | 航線: {DEPART_CITY} -> {ARRIVE_CITY} | 預計抓取 {TEST_DAYS} 天份")
