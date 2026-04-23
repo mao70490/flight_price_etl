@@ -1,13 +1,12 @@
 import pandas as pd
 
-def parse_flights_to_df(data, ddate, scrap_day):
+def parse_flights_to_df(data, trip_type, ddate):
     flights = []
 
     if not data or "itineraryList" not in data:
         print("❌ 沒有 itineraryList")
         return pd.DataFrame()
 
-    # global_currency = data.get("currency") or data.get("context", {}).get("currency", "TWD")
 
     for item in data.get("itineraryList", []):
         try:
@@ -32,8 +31,8 @@ def parse_flights_to_df(data, ddate, scrap_day):
             )
 
             flights.append({
+                "trip_type": trip_type,
                 "search_date": ddate,
-                "scrap_time": scrap_day,
 
                 "depart_airport": first_seg.get("departPoint", {}).get("airportCode"),
                 "arrive_airport": last_seg.get("arrivePoint", {}).get("airportCode"),
@@ -45,7 +44,6 @@ def parse_flights_to_df(data, ddate, scrap_day):
                 "flight_no": f_info.get("flightNo"),
 
                 "price": price_info.get("totalPrice"),
-                # "currency": price_info.get("currency") or global_currency,
 
                 "stops": len(sections) - 1
             })

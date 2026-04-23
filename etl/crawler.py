@@ -1,15 +1,15 @@
 from playwright.sync_api import sync_playwright
+import json, os
 from transform import parse_flights_to_df
-import json
 from datetime import datetime, timedelta
 
-def fetch_flights_by_url_logic(depart_code, arrive_code, ddate):
-    # 1. 自動計算回程日期 (原本的邏輯)
-    depart_dt_obj = datetime.strptime(ddate, "%Y-%m-%d")
-    return_dt = (depart_dt_obj + timedelta(days=2)).strftime("%Y-%m-%d")
-    
-    # 2. 根據你提供的樣板構造網址
-    # 我們將 dcity, acity, ddate, rdate 替換成變數
+
+def fetch_flights_full_flow(depart_code, arrive_code, ddate):
+    # 🔹 1. 計算回程日期
+    depart_dt = datetime.strptime(ddate, "%Y-%m-%d")
+    return_dt = (depart_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+
+    # 🔹 2. 組 URL
     search_url = (
         f"https://tw.trip.com/flights/showfarefirst?"
         f"dcity={depart_code.lower()}&"
@@ -21,78 +21,87 @@ def fetch_flights_by_url_logic(depart_code, arrive_code, ddate):
         f"locale=zh-TW&curr=TWD"
     )
 
-    result_data = None
+    outbound_data = None
+    return_data = None
 
     with sync_playwright() as p:
-        # headless=False 先觀察一次，確認沒問題後再改 True
         browser = p.chromium.launch(headless=False)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-        )
+        context = browser.new_context()
         page = context.new_page()
 
-        # 監聽 Response (原本攔截 FlightListSearch 的邏輯)
+        # 🔥 3. 監聽所有 response（核心）
         def handle_response(response):
-            nonlocal result_data
-            # 保持原本的攔截關鍵字
-            if "FlightListSearch" in response.url and response.status == 200:
-                try:
+            nonlocal outbound_data, return_data
+
+            if response.status != 200:
+                return
+
+            try:
+                url = response.url
+
+                # 🟢 去程：SSE
+                if "FlightListSearchSSE" in url:
                     text = response.text()
+
                     for line in text.split("\n"):
                         if "data:" in line:
-                            json_str = line.split("data:")[-1].strip()
-                            data = json.loads(json_str)
-                            if data.get("itineraryList"):
-                                result_data = data
+                            data = json.loads(line.replace("data:", "").strip())
 
-                                # --- 🚀 新增：Debug 存檔區 ---
-                                # with open("flight_debug.json", "w", encoding="utf-8") as f:
-                                #     json.dump(data, f, ensure_ascii=False, indent=4)
-                                # print("💾 已將攔截到的原始數據存至 flight_debug.json")
-                                # --------------------------
-                except:
-                    pass
+                            if data.get("itineraryList") and not outbound_data:
+                                outbound_data = data
+                                print("✅ 抓到去程")
+
+                # 🔵 回程：一般 API
+                elif "FlightListSearch" in url:
+                    data = response.json()
+
+                    if data.get("itineraryList") and not return_data:
+                        return_data = data
+                        print("✅ 抓到回程")
+
+            except Exception as e:
+                print("parse error:", e)
 
         page.on("response", handle_response)
 
+        # 🔹 4. 進入搜尋頁（觸發去程 API）
+        print("🔗 進入搜尋頁")
+        page.goto(search_url, wait_until="domcontentloaded")
+
+        # 🔹 5. 等去程資料
+        for _ in range(30):
+            if outbound_data:
+                break
+            page.wait_for_timeout(500)
+
+        if not outbound_data:
+            print("❌ 去程沒抓到")
+            return None, None
+
+        # 🔥 6. 點擊「選取」→ 觸發回程
         try:
-            print(f"🔗 正在直達搜尋結果頁...")
-            
-            # 直接跳轉，wait_until 使用 commit 或 domcontentloaded 即可，不用等 networkidle
-            page.goto(search_url, wait_until="domcontentloaded")
+            print("👉 點擊航班觸發回程")
 
-            # 3. 監控與救援邏輯
-            found_data = False
-            for i in range(30): # 最多等 15 秒
-                if result_data:
-                    print(f"✅ 成功！在第 {i*0.5} 秒截獲數據")
-                    found_data = True
-                    break
-                
-                # 如果等了 5 秒都沒資料，檢查是否遇到驗證碼或軟 404
-                if i == 10:
-                    if "Robot Check" in page.title() or "驗證" in page.content():
-                        print("🚨 遇到機器人驗證！請在視窗中手動點擊驗證...")
-                        # 這裡可以暫停腳本等你手動點，或是直接報錯
-                        # page.pause() 
-                    else:
-                        print("♻️ 數據未出現，執行一次輕微滾動觸發加載...")
-                        page.mouse.wheel(0, 500)
-                
-                page.wait_for_timeout(500)
+            page.wait_for_selector('[data-testid="u_select_btn"]', timeout=10000)
 
-            if not found_data:
-                print("❌ 最終未截獲數據。")
+            page.locator('[data-testid="u_select_btn"]').first.click()
 
         except Exception as e:
-            print(f"❌ 執行出錯: {e}")
-        finally:
-            # 調試時可先不關閉瀏覽器
-            # browser.close()
-            pass
+            print("❌ 點擊失敗:", e)
+            return outbound_data, None
 
-    return result_data
+        # 🔹 7. 等回程資料
+        for _ in range(30):
+            if return_data:
+                break
+            page.wait_for_timeout(500)
 
+        if not return_data:
+            print("⚠️ 沒抓到回程")
+
+        browser.close()
+
+    return outbound_data, return_data
 
 
 if __name__ == "__main__":
@@ -100,20 +109,31 @@ if __name__ == "__main__":
     test_depart = "TPE"      # 出發地
     test_arrive = "TYO"      # 目的地
     test_date = "2026-05-20" # 出發日期 (格式必須為 YYYY-MM-DD)
+    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+    output_dir = os.path.join(BASE_DIR, "data")
+    os.makedirs(output_dir, exist_ok=True)
+    # ------------------
 
-    print("🚀 --- 開始執行 URL 構造法測試 ---")
-    
-    # 呼叫你的函式
-    # 建議先確保 fetch_flights_by_url_logic 內部已經改成 page.goto(search_url) 邏輯
-    final_result = fetch_flights_by_url_logic(test_depart, test_arrive, test_date)
+    outbound, ret = fetch_flights_full_flow(test_depart, test_arrive, test_date)
 
-    # --- 結果驗證區 ---
-    print("\n--- 測試結果報告 ---")
-    if final_result:
-        df = parse_flights_to_df(final_result, ddate=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), scrap_day=test_date)
+    print("\n=== 測試結果 ===")
 
-        print("✅ DataFrame 產生成功")
-        print(df.head())
+    if outbound:
+        print(f"✅ 去程抓到：{len(outbound.get('itineraryList', []))} 筆")
+        # with open(os.path.join(output_dir, "outbound.json"), "w", encoding="utf-8") as f:
+        #     json.dump(outbound, f, ensure_ascii=False, indent=2)
+        df_out = parse_flights_to_df(outbound, "outbound", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        print(df_out.head())
+
     else:
-        print("❌ 測試失敗：未能攔截到 FlightListSearch 數據。")
-        print("💡 建議：請檢查 headless 是否設為 False，觀察是否遇到了驗證碼。")
+        print("❌ 去程失敗")
+
+    if ret:
+        print(f"✅ 回程抓到：{len(ret.get('itineraryList', []))} 筆")
+        # with open(os.path.join(output_dir, "return.json"), "w", encoding="utf-8") as f:
+        #     json.dump(ret, f, ensure_ascii=False, indent=2)
+        df_ret = parse_flights_to_df(ret, "return", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        print(df_ret.head())
+
+    else:
+        print("❌ 回程失敗")
