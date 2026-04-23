@@ -8,9 +8,13 @@ class TripCrawler:
     def __init__(self, headless=True):
         self.headless = headless
 
-    def _build_url(self, depart_code, arrive_code, ddate):
+    def _build_url(self, depart_code, arrive_code, ddate, return_date=None):
         depart_dt = datetime.strptime(ddate, "%Y-%m-%d")
-        return_dt = (depart_dt + timedelta(days=2)).strftime("%Y-%m-%d")
+        # 如果沒有回程日期，預設為去程日期後兩天
+        if return_date:
+            return_dt = return_date
+        else:
+            return_dt = (depart_dt + timedelta(days=2)).strftime("%Y-%m-%d")
 
         return (
             f"https://tw.trip.com/flights/showfarefirst?"

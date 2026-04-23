@@ -24,6 +24,9 @@ data/
 .DS_Store
 Thumbs.db
 
+# Config files
+config/
+
 # Logs
 *.log
 
