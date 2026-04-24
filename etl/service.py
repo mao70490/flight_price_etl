@@ -20,12 +20,12 @@ class FlightService:
 
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        df_out = self.transformer.parse_to_df(outbound, "outbound", now)
-        self.db.insert_dataframe(df_out, "flight_prices")
+        df_out = self.transformer.parse_flights_to_df(outbound, "outbound", now)
+        self.db.insert_dataframe(df_out, "flight_snapshot")
 
         if ret:
-            df_ret = self.transformer.parse_to_df(ret, "return", now)
-            self.db.insert_dataframe(df_ret, "flight_prices")
+            df_ret = self.transformer.parse_flights_to_df(ret, "return", now)
+            self.db.insert_dataframe(df_ret, "flight_snapshot")
 
         print("✅ ETL 完成")
 

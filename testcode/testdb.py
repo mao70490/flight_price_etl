@@ -10,7 +10,7 @@ conn = pyodbc.connect(
 cursor = conn.cursor()
 
 cursor.execute("""
-INSERT INTO flight_prices (trip_type, search_time, price)
+INSERT INTO flight_snapshot (trip_type, search_time, price)
 VALUES (?, GETDATE(), ?)
 """, ("test", 1234))
 
