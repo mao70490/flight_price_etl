@@ -1,16 +1,39 @@
 from crawler import TripCrawler
 from transform import FlightDataTransformer
 from datetime import datetime
-from config.dbconfig import DB_CONN_STR
-from load import DBLoader
+# from config.dbconfig import DB_CONN_STR
+# from load import DBLoader
 
 class FlightService:
 
     def __init__(self):
         self.crawler = TripCrawler()
-        self.db = DBLoader(DB_CONN_STR)
+        # self.db = DBLoader(DB_CONN_STR)
         self.transformer = FlightDataTransformer()
 
+    
+    # 測試抓取到的資料是否能成功轉成df格式
+    def test_transform(self, depart, arrive, date):
+        outbound, ret = self.crawler.fetch(depart, arrive, date)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        df_out = None
+        df_ret = None
+
+        if outbound:
+            df_out = self.transformer.parse_flights_to_df(outbound, "outbound", now)
+            print("\n===== OUT DF =====")
+            print(df_out.head())
+
+        if ret:
+            df_ret = self.transformer.parse_flights_to_df(ret, "return", now)
+            print("\n===== RET DF =====")
+            print(df_ret.head())
+
+        return df_out, df_ret
+    
+    
+    
     def run_etl(self, depart, arrive, date):
         outbound, ret = self.crawler.fetch(depart, arrive, date)
 
