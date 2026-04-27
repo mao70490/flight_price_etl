@@ -1,14 +1,13 @@
-from crawler import TripCrawler
-from transform import FlightDataTransformer
+from etl.crawler import TripCrawler
+from etl.transform import FlightDataTransformer
 from datetime import datetime
-# from config.dbconfig import DB_CONN_STR
-# from load import DBLoader
+from etl.load import DBLoader
 
 class FlightService:
 
-    def __init__(self):
+    def __init__(self, conn_str):
         self.crawler = TripCrawler()
-        # self.db = DBLoader(DB_CONN_STR)
+        self.loader  = DBLoader(conn_str)
         self.transformer = FlightDataTransformer()
 
     
@@ -33,31 +32,20 @@ class FlightService:
         return df_out, df_ret
     
     
-    
-    def run_etl(self, depart, arrive, date):
-        outbound, ret = self.crawler.fetch(depart, arrive, date)
+    # 執行完整 ETL 流程
+    def run(self, depart, arrive, ddate):
 
-        if not outbound:
-            print("❌ outbound 失敗")
-            return
+        snapshot_time = datetime.now()
 
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 🔥 1. 抓資料
+        outbound, ret = self.crawler.fetch(depart, arrive, ddate)
 
-        df_out = self.transformer.parse_flights_to_df(outbound, "outbound", now)
-        self.db.insert_dataframe(df_out, "flight_snapshot")
+        # 🔥 2. transform
+        snap1, raw1 = self.transformer.parse(outbound, "outbound", ddate, snapshot_time)
+        snap2, raw2 = self.transformer.parse(ret, "return", ddate, snapshot_time)
 
-        if ret:
-            df_ret = self.transformer.parse_flights_to_df(ret, "return", now)
-            self.db.insert_dataframe(df_ret, "flight_snapshot")
+        # 🔥 3. load
+        self.loader.insert_snapshot(snap1 + snap2)
+        self.loader.insert_raw(raw1 + raw2)
 
         print("✅ ETL 完成")
-
-    def _combine(self, df_out, df_ret):
-        df = df_out.merge(df_ret, how="cross", suffixes=("_out", "_ret"))
-
-        df["total_price"] = df["price_out"] + df["price_ret"]
-
-        # 過濾不合理回程
-        df = df[df["depart_time_ret"] > df["arrive_time_out"]]
-
-        return df.sort_values("total_price")
