@@ -8,7 +8,7 @@ class TripCrawler:
     def __init__(self, headless=True):
         self.headless = headless
 
-    def _build_url(self, depart_code, arrive_code, ddate, return_date=None):
+    def _build_url(self, depart_code, arrive_code, ddate, trip_type="rt", return_date=None):
         depart_dt = datetime.strptime(ddate, "%Y-%m-%d")
         # 如果沒有回程日期，預設為去程日期後兩天
         if return_date:
@@ -22,13 +22,14 @@ class TripCrawler:
             f"acity={arrive_code.lower()}&"
             f"ddate={ddate}&"
             f"rdate={return_dt}&"
-            f"triptype=rt&class=y&lowpricesource=searchform&"
+            f"triptype={trip_type}&"
+            f"class=y&lowpricesource=searchform&"
             f"quantity=1&searchboxarg=t&nonstoponly=off&"
             f"locale=zh-TW&curr=TWD"
         )
 
-    def fetch(self, depart_code, arrive_code, ddate):
-        search_url = self._build_url(depart_code, arrive_code, ddate)
+    def fetch(self, depart_code, arrive_code, ddate, trip_type="rt"):
+        search_url = self._build_url(depart_code, arrive_code, ddate, trip_type)
 
         outbound_data = None
         return_data = None
@@ -47,7 +48,7 @@ class TripCrawler:
                 try:
                     url = response.url
 
-                    # 🟢 去程
+                    # 🟢 去程（RT / OW 都會進來）
                     if "FlightListSearchSSE" in url:
                         text = response.text()
 
@@ -59,7 +60,7 @@ class TripCrawler:
                                     outbound_data = data
                                     print("✅ 抓到去程")
 
-                    # 🔵 回程
+                    # 🔵 回程（只有 RT 才需要）
                     elif "FlightListSearch" in url:
                         data = response.json()
 
@@ -72,10 +73,10 @@ class TripCrawler:
 
             page.on("response", handle_response)
 
-            print("🔗 進入搜尋頁")
+            print(f"🔗 進入搜尋頁 ({trip_type.upper()})")
             page.goto(search_url, wait_until="domcontentloaded")
 
-            # 等去程
+            # 等去程（OW / RT 共用）
             for _ in range(30):
                 if outbound_data:
                     break
@@ -83,9 +84,14 @@ class TripCrawler:
 
             if not outbound_data:
                 print("❌ 去程沒抓到")
-                return None, None
+                return None if trip_type == "ow" else (None, None)
 
-            # 點擊觸發回程
+            # 🟡 如果是 OW → 直接結束
+            if trip_type == "ow":
+                browser.close()
+                return outbound_data
+            
+            # RT 才需要點擊回程
             try:
                 page.wait_for_selector('[data-testid="u_select_btn"]', timeout=10000)
                 page.locator('[data-testid="u_select_btn"]').first.click()

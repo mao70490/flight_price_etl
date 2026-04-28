@@ -9,18 +9,19 @@ if __name__ == "__main__":
     
     service = FlightService(DB_CONN_STR)
 
-
-    # -------------  測試資料是否成功轉成df格式  -----------------
-    # service.test_transform(
-    #     depart="TPE",
-    #     arrive="LON",
-    #     date="2026-05-20"
-    # )
-    # ---------------- 測試是否成功load進db ---------------------
+    # ---------------- 測試來回是否成功load進db ---------------------
     service.run(
         depart="TPE",
         arrive="LON",
-        ddate="2026-05-20"
+        ddate="2026-05-20",
+        trip_type="rt"
+    )
+    # ---------------- 測試單程是否成功load進db ---------------------
+    service.run(
+        depart="TPE",
+        arrive="LON",
+        ddate="2026-05-20",
+        trip_type="ow"
     )
 
 

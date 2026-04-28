@@ -8,34 +8,6 @@ class DBLoader:
         self.conn = pyodbc.connect(conn_str)
         self.cursor = self.conn.cursor()
 
-    def insert_dataframe(self, df, table_name):
-        if df.empty:
-            print("❌ DataFrame 是空的")
-            return
-
-        # 👉 處理 NaN → None
-        df = df.where(pd.notnull(df), None)
-
-        conn = pyodbc.connect(self.conn_str)
-        cursor = conn.cursor()
-
-        columns = ",".join(df.columns)
-        placeholders = ",".join(["?"] * len(df.columns))
-
-        sql = f"""
-        INSERT INTO {table_name} ({columns})
-        VALUES ({placeholders})
-        """
-
-        for _, row in df.iterrows():
-            cursor.execute(sql, tuple(row))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        print(f"✅ 寫入 {len(df)} 筆資料")
-
     # =========================
     # 🟢 INSERT snapshot
     # =========================
@@ -45,13 +17,13 @@ class DBLoader:
         INSERT INTO flight_snapshot (
             itinerary_id,
             search_date,
-            return_date,
-            depart_code,
-            arrive_code,
+            trip_type,
+            depart_airport,
+            arrive_airport,
             snapshot_time,
             depart_time,
             arrive_time,
-            total_price,
+            price,
             stops,
             total_duration,
             airline
@@ -63,7 +35,7 @@ class DBLoader:
             self.cursor.execute(sql,
                 r["itinerary_id"],
                 r.get("search_date"),
-                None,  # return_date 你之後可補
+                r.get("trip_type"),
                 r.get("depart_airport"),
                 r.get("arrive_airport"),
                 r.get("snapshot_time"),
