@@ -5,9 +5,10 @@ class FlightDataTransformer:
     def parse(self, data, trip_type, ddate, snapshot_time):
         snapshot_rows = []
         raw_rows = []
+        segment_rows = []
 
         if not data or "itineraryList" not in data:
-            return [], []
+            return [], [], []
 
         for item in data.get("itineraryList", []):
             try:
@@ -17,16 +18,23 @@ class FlightDataTransformer:
                 if not sections:
                     continue
 
+                itinerary_id = journey.get("uniqueId")
+
+                # 防呆（避免 NULL insert 爆掉）
+                if not itinerary_id:
+                    print("沒有 uniqueId，跳過")
+                    continue
+                
                 first_seg = sections[0]
                 last_seg = sections[-1]
 
                 f_info = first_seg.get("flightInfo", {})
 
                 policies = item.get("policies", [])
-                price_info = policies[0].get("price", {}) if policies else {}
+                price_info = policies[0].get("price", {}) if policies else {}               
 
-                itinerary_id = journey.get("uniqueId")
-
+                total_duration = journey.get("duration")
+                
                 airline = (
                     f_info.get("airlineName") or 
                     f_info.get("airlineCode") or 
@@ -49,6 +57,8 @@ class FlightDataTransformer:
                     "flight_no": f_info.get("flightNo"),
 
                     "price": price_info.get("totalPrice"),
+                    # 搭機總時長，含轉機時間(從API拿的)
+                    "total_duration": total_duration,
 
                     "stops": len(sections) - 1,
                     "snapshot_time": snapshot_time
@@ -61,8 +71,32 @@ class FlightDataTransformer:
                     "raw_json": item
                 })
 
+                # 🔵 segment
+                for seg in sections:
+                    seg_info = seg.get("flightInfo", {})
+
+                    segment_rows.append({
+                        "itinerary_id": itinerary_id,
+                        "segment_no": seg.get("segmentNo"),
+
+                        "depart_airport": seg.get("departPoint", {}).get("airportCode"),
+                        "arrive_airport": seg.get("arrivePoint", {}).get("airportCode"),
+
+                        "depart_time": seg.get("departDateTime"),
+                        "arrive_time": seg.get("arriveDateTime"),
+
+                        "airline": seg_info.get("airlineCode"),
+                        "flight_no": seg_info.get("flightNo"),
+
+                        # 航段飛行時間（不包含轉機等待）
+                        "duration": seg.get("duration"),
+
+                        # 轉機等待時間（只有第2段開始才會有）
+                        "transfer_duration": seg.get("transferDuration")
+                    })
+
             except Exception as e:
                 print(f"⚠️ error: {e}")
                 continue
 
-        return snapshot_rows, raw_rows
+        return snapshot_rows, raw_rows, segment_rows

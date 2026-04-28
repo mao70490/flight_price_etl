@@ -43,7 +43,7 @@ class DBLoader:
                 r.get("arrive_time"),
                 r.get("price"),
                 r.get("stops"),
-                None,  # duration 之後可算
+                r.get("total_duration"),
                 r.get("airline")
             )
 
@@ -85,3 +85,40 @@ class DBLoader:
 
         self.cursor.execute(sql, itinerary_id, snapshot_time)
         return self.cursor.fetchone() is not None
+    
+
+    # =========================
+    # 🔵 insert segment
+    # =========================
+    def insert_segment(self, rows):
+        sql = """
+        INSERT INTO flight_segment (
+            itinerary_id,
+            segment_no,
+            depart_airport,
+            arrive_airport,
+            depart_time,
+            arrive_time,
+            airline,
+            flight_no,
+            duration,
+            transfer_duration
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """
+
+        for r in rows:
+            self.cursor.execute(sql,
+                r["itinerary_id"],
+                r["segment_no"],
+                r["depart_airport"],
+                r["arrive_airport"],
+                r["depart_time"],
+                r["arrive_time"],
+                r["airline"],
+                r["flight_no"],
+                r["duration"],
+                r.get("transfer_duration")
+            )
+
+        self.conn.commit()
