@@ -12,45 +12,55 @@ class FlightService:
     
     
     # 執行完整 ETL 流程
-    def run(self, depart, arrive, ddate, trip_type="rt"):
+    def run(self, depart, arrive, ddate, trip_type="rt",return_date=None):
 
         snapshot_time = datetime.now()
 
         # 1. 抓資料
-        result = self.crawler.fetch(depart, arrive, ddate, trip_type)
+        result = self.crawler.fetch(depart, arrive, ddate, trip_type,return_date)
 
-        # 2️. 根據類型處理
-        if trip_type == "rt":
-            outbound, ret = result
+        if not result:
+            print("❌ 沒抓到資料")
+            return
 
-            snap1, raw1, seg1 = self.transformer.parse(
-                outbound, "outbound", ddate, snapshot_time
+        all_snap = []
+        all_raw = []
+        all_seg = []
+
+        # 2. outbound
+        outbound = result["outbound"]
+
+        if outbound:
+
+            snap, raw, seg = self.transformer.parse(
+                outbound,
+                trip_type,
+                ddate,
+                snapshot_time
             )
 
-            snap2, raw2, seg2 = self.transformer.parse(
-                ret, "return", ddate, snapshot_time
+            all_snap.extend(snap)
+            all_raw.extend(raw)
+            all_seg.extend(seg)
+
+        # 3. return
+        return_data = result["return"]
+
+        if return_data:
+
+            snap, raw, seg = self.transformer.parse(
+                return_data,
+                trip_type,
+                ddate,
+                snapshot_time
             )
 
-            all_snap = snap1 + snap2
-            all_raw = raw1 + raw2
-            all_seg = seg1 + seg2
-
-        elif trip_type == "ow":
-            outbound = result
-
-            snap1, raw1, seg1 = self.transformer.parse(
-                outbound, "oneway", ddate, snapshot_time
-            )
-
-            all_snap = snap1
-            all_raw = raw1
-            all_seg = seg1
-
-        else:
-            raise ValueError("trip_type 必須是 'rt' 或 'ow'")
+            all_snap.extend(snap)
+            all_raw.extend(raw)
+            all_seg.extend(seg)
 
 
-        # 🔥 3. load
+        # 4. load
         if all_snap:
             print(f"💾 寫入 snapshot {len(all_snap)} 筆")
             self.loader.insert_snapshot(all_snap)

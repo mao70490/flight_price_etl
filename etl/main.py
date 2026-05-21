@@ -13,14 +13,14 @@ if __name__ == "__main__":
     service.run(
         depart="TPE",
         arrive="LON",
-        ddate="2026-05-20",
+        ddate="2026-06-20",
         trip_type="rt"
     )
     # ---------------- 測試單程是否成功load進db ---------------------
     service.run(
         depart="TPE",
         arrive="LON",
-        ddate="2026-05-20",
+        ddate="2026-06-20",
         trip_type="ow"
     )
 
