@@ -103,7 +103,8 @@ class TripCrawler:
 
                 try:
                     page.wait_for_selector('[data-testid="u_select_btn"]', timeout=10000)
-                    page.locator('[data-testid="u_select_btn"]').first.click()
+                    page.wait_for_timeout(2000)
+                    page.locator('[data-testid="u_select_btn"]').first.click(force=True)
                 except Exception as e:
                     print("❌ 點擊失敗:", e)
 
@@ -123,47 +124,4 @@ class TripCrawler:
             "return": return_data
         }
     
-    # 多日期 OW 抓取 (測試)
-    def fetch_ow_range(self, depart, arrive, start_date, days=5):
-        results = []
-
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-
-        for i in range(days):
-            ddate = (start + timedelta(days=i)).strftime("%Y-%m-%d")
-
-            print(f"📅 OW 抓取: {ddate}")
-
-            result = self.fetch(depart, arrive, ddate, trip_type="ow")
-
-            if result:
-                results.append(result)
-
-        return results
     
-    # 多日期 RT 抓取 (測試)
-    def fetch_rt_range(self, depart, arrive, start_date, days=5, stay_days=3):
-        results = []
-
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-
-        for i in range(days):
-            depart_date = (start + timedelta(days=i)).strftime("%Y-%m-%d")
-
-            for j in range(1, stay_days + 1):
-                return_date = (start + timedelta(days=i + j)).strftime("%Y-%m-%d")
-
-                print(f"📅 RT 抓取: {depart_date} → {return_date}")
-
-                result = self.fetch(
-                    depart,
-                    arrive,
-                    depart_date,
-                    trip_type="rt",
-                    return_date=return_date
-                )
-
-                if result:
-                    results.append(result)
-
-        return results

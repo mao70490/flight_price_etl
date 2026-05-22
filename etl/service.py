@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from etl.crawler import TripCrawler
 from etl.transform import FlightDataTransformer
 from datetime import datetime
@@ -51,7 +52,7 @@ class FlightService:
             snap, raw, seg = self.transformer.parse(
                 return_data,
                 trip_type,
-                ddate,
+                return_date,
                 snapshot_time
             )
 
@@ -74,3 +75,42 @@ class FlightService:
             self.loader.insert_segment(all_seg)
 
         print("✅ ETL 完成")
+
+    # 多日期 OW 抓取 (測試)
+    def run_ow_range(self, depart, arrive, start_date, days=5):
+
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+
+        for i in range(days):
+            ddate = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+
+            print(f"📅 OW 抓取: {ddate}")
+
+            self.run(
+                depart=depart,
+                arrive=arrive,
+                ddate=ddate,
+                trip_type="ow"
+            )
+    
+    # 多日期 RT 抓取 (測試)
+    def run_rt_range(self, depart, arrive, start_date, days=5, stay_days=3):
+
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+
+        for i in range(days):
+            depart_date = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+
+            for j in range(1, stay_days + 1):
+                return_date = (start + timedelta(days=i + j)).strftime("%Y-%m-%d")
+
+                print(f"📅 RT 抓取: {depart_date} → {return_date}")
+
+                self.run(
+                    depart=depart,
+                    arrive=arrive,
+                    ddate=depart_date,
+                    return_date=return_date,
+                    trip_type="rt"
+                )
+
